@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>字符串匹配算法可视化</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        body {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background: #f5f7fa;
+        }
+        .title {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 26px;
+        }
+        .input-box {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+        .input-group {
+            margin-bottom: 18px;
+        }
+        label {
+            display: inline-block;
+            width: 100px;
+            font-weight: bold;
+        }
+        input {
+            width: calc(100% - 110px);
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .btn-group, .control-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background: #3498db;
+            color: white;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .visual-box {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 25px;
+        }
+        .string-show {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin: 15px 0;
+        }
+        .char {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #3498db;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            background: #ecf0f1;
+        }
+        .char.main-cur { background: #f39c12; color:white; }
+        .char.pat-cur  { background: #2ecc71; color:white; }
+        .char.match    { background: #27ae60; color:white; }
+        .char.mismatch { background: #e74c3c; color:white; }
+        .info { margin: 12px 0; font-size: 15px; }
+        .log-box {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            max-height: 350px;
+            overflow-y: auto;
+        }
+        .log-title { font-weight: bold; margin-bottom: 15px; }
+        .log-item { padding: 8px; border-bottom: 1px solid #eee; font-size:14px; }
+        .bm-data {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="title">字符串匹配算法可视化</h1>
+
+    <div class="input-box">
+        <div class="input-group">
+            <label>主字符串：</label>
+            <input type="text" id="mainStr" value="ABABABCABABABD">
+        </div>
+        <div class="input-group">
+            <label>模式串：</label>
+            <input type="text" id="patStr" value="ABABD">
+        </div>
+
+        <div class="btn-group">
+            <button onclick="prepare('naive')">朴素算法</button>
+            <button onclick="prepare('kmp')">KMP 算法</button>
+            <button onclick="prepare('bm')">BM 算法</button>
+            <button onclick="prepare('sunday')">Sunday 算法</button>
+            <button onclick="reset()">重置</button>
+        </div>
+
+        <div class="control-group">
+            <button id="btnStep" disabled onclick="stepRun()">逐步演示</button>
+            <button id="btnAuto" disabled onclick="autoRun()">自动演示</button>
+        </div>
+    </div>
+
+    <div class="visual-box">
+        <div class="info" id="stepInfo">请先选择算法</div>
+        <div id="mainContainer" class="string-show"></div>
+        <div id="patContainer" class="string-show"></div>
+        <div id="extraData" class="bm-data"></div>
+    </div>
+
+    <div class="log-box">
+        <div class="log-title">匹配过程记录</div>
+        <div id="logContainer"></div>
+    </div>
+
+<script>
+    let mainStr, patStr;
+    let mainChars = [], patChars = [];
+    let n, m;
+
+    let currentAlgo = null;
+    let gen = null;
+    let isAuto = false;
+    let timer = null;
+    const delay = 700;
+
+    const stepInfo = document.getElementById("stepInfo");
+    const logContainer = document.getElementById("logContainer");
+    const extraData = document.getElementById("extraData");
+    const btnStep = document.getElementById("btnStep");
+    const btnAuto = document.getElementById("btnAuto");
+
+    function initStr() {
+        mainStr = document.getElementById("mainStr").value.trim();
+        patStr = document.getElementById("patStr").value.trim();
+        if (!mainStr || !patStr) { alert("请输入主串和模式串"); return false; }
+        n = mainStr.length;
+        m = patStr.length;
+        reset();
+        render();
+        return true;
+    }
+
+    function render() {
+        const mCon = document.getElementById("mainContainer");
+        const pCon = document.getElementById("patContainer");
+        mCon.innerHTML = ''; pCon.innerHTML = '';
+        mainChars = []; patChars = [];
+        for (const c of mainStr) {
+            const d = document.createElement("div");
+            d.className = "char"; d.textContent = c;
+            mCon.appendChild(d); mainChars.push(d);
+        }
+        for (const c of patStr) {
+            const d = document.createElement("div");
+            d.className = "char"; d.textContent = c;
+            pCon.appendChild(d); patChars.push(d);
+        }
+    }
+
+    function clearStyle() {
+        mainChars.forEach(x => x.className = "char");
+        patChars.forEach(x => x.className = "char");
+    }
+
+    function log(text) {
+        const div = document.createElement("div");
+        div.className = "log-item";
+        div.textContent = text;
+        logContainer.appendChild(div);
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    function reset() {
+        clearTimeout(timer);
+        isAuto = false;
+        clearStyle();
+        logContainer.innerHTML = "";
+        extraData.innerHTML = "";
+        stepInfo.textContent = "请先选择算法";
+        currentAlgo = null;
+        gen = null;
+        btnStep.disabled = true;
+        btnAuto.disabled = true;
+    }
+
+    function prepare(algo) {
+        if (!initStr()) return;
+        currentAlgo = algo;
+        btnStep.disabled = false;
+        btnAuto.disabled = false;
+
+        switch (algo) {
+            case 'naive': gen = naive(); break;
+            case 'kmp': gen = kmp(); break;
+            case 'bm': gen = bm(); break;
+            case 'sunday': gen = sunday(); break;
+        }
+    }
+
+    function stepRun() {
+        if (!gen) return;
+        const r = gen.next();
+        if (r.done) { btnStep.disabled = true; btnAuto.disabled = true; }
+    }
+
+    function autoRun() {
+        if (!gen) return;
+        isAuto = true;
+        runAuto();
+    }
+
+    function runAuto() {
+        if (!isAuto) return;
+        const r = gen.next();
+        if (r.done) { isAuto = false; btnStep.disabled = true; btnAuto.disabled = true; return; }
+        timer = setTimeout(runAuto, delay);
+    }
+
+// ------------------------------
+// 朴素算法（完整日志）
+// ------------------------------
+function* naive() {
+    log("=== 朴素算法开始 ===");
+    let i = 0, j = 0;
+    while (i <= n - m) {
+        clearStyle();
+        mainChars[i + j].classList.add("main-cur");
+        patChars[j].classList.add("pat-cur");
+
+        if (mainStr[i + j] === patStr[j]) {
+            mainChars[i + j].classList.add("match");
+            patChars[j].classList.add("match");
+            log(`匹配：主串[${i+j}]=${mainStr[i+j]}，模式[${j}]=${patStr[j]}`);
+            j++;
+            if (j === m) {
+                stepInfo.textContent = `✅ 匹配成功，位置=${i}`;
+                log(`=== 朴素算法完成 → 成功，位置：${i} ===`);
+                return;
+            }
+        } else {
+            mainChars[i + j].classList.add("mismatch");
+            patChars[j].classList.add("mismatch");
+            log(`失配：主串[${i+j}]=${mainStr[i+j]}，模式[${j}]=${patStr[j]}，模式右移1位`);
+            i++; j = 0;
+        }
+        stepInfo.textContent = `朴素 i=${i} j=${j}`;
+        yield;
+    }
+    stepInfo.textContent = "❌ 匹配失败";
+    log("=== 朴素算法完成 → 匹配失败 ===");
+}
+
+// ------------------------------
+// KMP（完整日志）
+// ------------------------------
+function getNext(p) {
+    const m = p.length;
+    const next = new Array(m).fill(0);
+    let len = 0, i = 1;
+    while (i < m) {
+        if (p[i] === p[len]) next[i++] = ++len;
+        else if (len !== 0) len = next[len - 1];
+        else i++;
+    }
+    return next;
+}
+
+function* kmp() {
+    const next = getNext(patStr);
+    extraData.textContent = `next: [${next}]`;
+    log("=== KMP算法开始 ===");
+    log(`next数组：[${next}]`);
+
+    let i = 0, j = 0;
+    while (i < n) {
+        clearStyle();
+        mainChars[i].classList.add("main-cur");
+        patChars[j].classList.add("pat-cur");
+
+        if (mainStr[i] === patStr[j]) {
+            mainChars[i].classList.add("match");
+            patChars[j].classList.add("match");
+            log(`匹配：主串[${i}]=${mainStr[i]}，模式[${j}]=${patStr[j]}`);
+            i++; j++;
+            if (j === m) {
+                stepInfo.textContent = `✅ KMP 成功，位置=${i - j}`;
+                log(`=== KMP算法完成 → 成功，位置：${i-j} ===`);
+                return;
+            }
+        } else {
+            mainChars[i].classList.add("mismatch");
+            patChars[j].classList.add("mismatch");
+            if (j !== 0) {
+                log(`失配！j从${j}跳转到 next[${j-1}]=${next[j-1]}`);
+                j = next[j-1];
+            } else {
+                log(`失配！j=0，主串指针+1`);
+                i++;
+            }
+        }
+        stepInfo.textContent = `KMP i=${i} j=${j}`;
+        yield;
+    }
+    stepInfo.textContent = "❌ KMP 失败";
+    log("=== KMP算法完成 → 匹配失败 ===");
+}
+
+// ------------------------------
+// BM 坏字符（正确稳定）
+// ------------------------------
+function* bm() {
+    const bc = {};
+    for (let i = 0; i < m; i++) {
+        bc[patStr[i]] = i;
+    }
+    extraData.textContent = `坏字符表：${JSON.stringify(bc)}`;
+    log("=== BM 算法（坏字符规则）===");
+
+    let pos = 0;
+    while (pos <= n - m) {
+        clearStyle();
+        let j = m - 1;
+
+        while (j >= 0 && mainStr[pos + j] === patStr[j]) {
+            mainChars[pos + j].classList.add("match");
+            patChars[j].classList.add("match");
+            j--;
+        }
+
+        if (j < 0) {
+            stepInfo.textContent = `✅ BM 匹配成功，位置=${pos}`;
+            log(`=== BM算法完成 → 成功，位置：${pos} ===`);
+            return;
+        }
+
+        mainChars[pos + j].classList.add("mismatch");
+        patChars[j].classList.add("mismatch");
+
+        const badChar = mainStr[pos + j];
+        const lastPos = bc[badChar] ?? -1;
+        let step = j - lastPos;
+        if (step < 1) step = 1;
+
+        log(`失配@j=${j} | 坏字符:'${badChar}' | 移动步数:${step}`);
+        pos += step;
+
+        stepInfo.textContent = `BM 下一个位置: ${pos}`;
+        yield;
+    }
+    stepInfo.textContent = "❌ BM 匹配失败";
+    log("=== BM算法完成 → 匹配失败 ===");
+}
+
+// ------------------------------
+// Sunday
+// ------------------------------
+function* sunday() {
+    log("=== Sunday算法开始 ===");
+    let i = 0;
+    while (i <= n - m) {
+        clearStyle();
+        let j = 0;
+        let ok = true;
+        while (j < m) {
+            mainChars[i + j].classList.add("main-cur");
+            patChars[j].classList.add("pat-cur");
+            if (mainStr[i + j] === patStr[j]) {
+                mainChars[i + j].classList.add("match");
+                patChars[j].classList.add("match");
+            } else {
+                mainChars[i + j].classList.add("mismatch");
+                patChars[j].classList.add("mismatch");
+                ok = false;
+                break;
+            }
+            j++;
+        }
+        if (ok) {
+            stepInfo.textContent = `✅ Sunday 成功，位置=${i}`;
+            log(`=== Sunday算法完成 → 成功，位置：${i} ===`);
+            return;
+        }
+        const ch = mainStr[i + m] ?? null;
+        const last = patStr.lastIndexOf(ch);
+        const step = last === -1 ? m + 1 : m - last;
+        log(`失配！下一个字符:'${ch}'，移动步数:${step}`);
+        i += step;
+        stepInfo.textContent = `Sunday i=${i}`;
+        yield;
+    }
+    stepInfo.textContent = "❌ Sunday 失败";
+    log("=== Sunday算法完成 → 匹配失败 ===");
+}
+</script>
+</body>
+</html>

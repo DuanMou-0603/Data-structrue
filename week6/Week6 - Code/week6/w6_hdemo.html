@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AC 自动机 - 正确 Trie 树</title>
+    <style>
+        * { box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { background: #f4f6f8; padding: 20px; max-width: 1100px; margin: auto; }
+        .panel {
+            background: white; border-radius: 10px; padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px;
+        }
+        .title { font-size: 19px; font-weight: bold; margin-bottom: 10px; }
+        #text { width: 100%; padding: 8px; font-size: 15px; margin-top: 5px; }
+        .buttons { display: flex; gap: 8px; margin: 12px 0; }
+        button { padding: 8px 14px; border: none; border-radius: 6px; background: #39f; color: white; cursor: pointer; }
+        button:disabled { background: #ccc; }
+
+        .text-chars { margin: 10px 0; display: flex; flex-wrap: wrap; gap: 4px; }
+        .char {
+            padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px;
+            font-size: 15px; min-width: 32px; text-align: center;
+        }
+        .char.now { background: #ffecb3; border-color: #ffab00; font-weight: bold; }
+        .char.hit { background: #e6ffed; border-color: #52c41a; }
+
+        .log {
+            height: 120px; background: #fafafa; padding: 10px; font-size: 13px;
+            border-radius: 6px; overflow-y: auto; white-space: pre-wrap;
+        }
+
+        /* === 树容器 === */
+        #tree {
+            position: relative; width: 100%; height: 520px;
+            background: #fff; border-radius: 8px; overflow: auto;
+        }
+
+        /* === 节点样式 === */
+        .node {
+            position: absolute; width: 34px; height: 34px;
+            border-radius: 50%; display: grid; place-items: center;
+            font-weight: bold; font-size: 14px;
+            border: 2px solid #91caff; background: #e6f7ff;
+            transform: translate(-50%, -50%);
+            transition: all 0.25s ease;
+            user-select: none;
+        }
+        .node.root { background: #fff2e6; border-color: #ffa940; }
+        .node.end { background: #e6ffed; border-color: #52c41a; }
+        .node.curr { background: #ffd700; border-color: #ff8c00; transform: translate(-50%, -50%) scale(1.25); box-shadow: 0 0 12px #ff8c00; }
+
+        /* === 边 === */
+        .line {
+            position: absolute; height: 2px; background: #aaa;
+            transform-origin: left center; z-index: 0;
+        }
+        .edge-text {
+            position: absolute; font-size: 13px; color: #222;
+            background: white; padding: 0 4px; font-weight: 500;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+
+<body>
+<div class="panel">
+    <div class="title">AC 自动机匹配演示</div>
+    <div>模式串：Joe、John、Johnny、Jane、Jack</div>
+    <input id="text" value="Hello Joe! Johnny Joe & Jane">
+    <div class="buttons">
+        <button id="reset">重置</button>
+        <button id="step">单步</button>
+        <button id="auto">自动</button>
+        <button id="skip">完成</button>
+    </div>
+    <div class="text-chars" id="charRow"></div>
+    <div id="info" style="margin:6px 0;">准备就绪</div>
+    <div class="log" id="log"></div>
+</div>
+
+<div class="panel">
+    <div class="title">Trie 树</div>
+    <div id="tree"></div>
+</div>
+
+<script>
+// ------------------------------
+// AC 自动机节点
+// ------------------------------
+class Node {
+    constructor() {
+        this.ch = {};
+        this.fail = null;
+        this.pats = [];
+        this.isEnd = false;
+        this.x = 0;
+        this.y = 0;
+    }
+}
+
+// 固定模式串
+const pats = ["Joe","John","Johnny","Jane","Jack"];
+const root = new Node();
+buildTrie();
+buildFail();
+layoutPerfect(); // 稳定布局
+
+// 全局状态
+let s = "";
+let arr = [];
+let ptr = 0;
+let cur = root;
+let hitSet = new Set();
+let timer = null;
+
+// ------------------------------
+// 1. 构建 Trie
+// ------------------------------
+function buildTrie() {
+    for (const p of pats) {
+        let u = root;
+        for (const c of p) {
+            if (!u.ch[c]) u.ch[c] = new Node();
+            u = u.ch[c];
+        }
+        u.isEnd = true;
+        u.pats.push(p);
+    }
+}
+
+// ------------------------------
+// 2. 构建失败指针
+// ------------------------------
+function buildFail() {
+    const q = [];
+    root.fail = null;
+    for (const c in root.ch) { root.ch[c].fail = root; q.push(root.ch[c]); }
+    while (q.length) {
+        const u = q.shift();
+        for (const c in u.ch) {
+            const v = u.ch[c];
+            let f = u.fail;
+            while (f && !f.ch[c]) f = f.fail;
+            v.fail = f ? f.ch[c] : root;
+            v.pats.push(...v.fail.pats);
+            v.isEnd ||= v.fail.isEnd;
+            q.push(v);
+        }
+    }
+}
+
+// ------------------------------
+// 3. 布局
+// ------------------------------
+function layoutPerfect() {
+    const levels = [];
+    const q = [{u:root, d:0}];
+    while (q.length) {
+        const {u,d} = q.shift();
+        if (!levels[d]) levels[d] = [];
+        levels[d].push(u);
+        for (const c in u.ch) q.push({u:u.ch[c], d:d+1});
+    }
+
+    const H = 90;
+    const W = 70;
+    levels[0][0].x = 550; levels[0][0].y = 40;
+
+    for (let d=1; d<levels.length; d++) {
+        const row = levels[d];
+        const total = row.length;
+        const start = 550 - (total-1)*W/2;
+        row.forEach((u,i) => {
+            u.x = start + i*W;
+            u.y = 40 + d*H;
+        });
+    }
+}
+
+// ------------------------------
+// 4. 渲染树（稳定不乱）
+// ------------------------------
+function renderTree() {
+    const dom = document.getElementById("tree");
+    dom.innerHTML = "";
+    const q = [root];
+
+    while (q.length) {
+        const u = q.shift();
+        // 画节点
+        const n = document.createElement("div");
+        n.className = "node";
+        if (u === root) n.classList.add("root");
+        if (u.isEnd) n.classList.add("end");
+        if (u === cur) n.classList.add("curr");
+        n.style.left = u.x + "px";
+        n.style.top = u.y + "px";
+        n.textContent = u === root ? "根" : "";
+        dom.appendChild(n);
+
+        // 画子节点
+        for (const c in u.ch) {
+            const v = u.ch[c];
+            q.push(v);
+            const dx = v.x - u.x;
+            const dy = v.y - u.y;
+            const len = Math.hypot(dx, dy);
+            const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+
+            const l = document.createElement("div");
+            l.className = "line";
+            l.style.left = u.x + "px";
+            l.style.top = u.y + "px";
+            l.style.width = len + "px";
+            l.style.transform = `rotate(${ang}deg)`;
+            dom.appendChild(l);
+
+            const t = document.createElement("div");
+            t.className = "edge-text";
+            t.style.left = (u.x + dx*0.5) + "px";
+            t.style.top = (u.y + dy*0.5) + "px";
+            t.textContent = c;
+            dom.appendChild(t);
+        }
+    }
+}
+
+// ------------------------------
+// 5. 渲染文本
+// ------------------------------
+function renderText() {
+    const row = document.getElementById("charRow");
+    row.innerHTML = "";
+    arr.forEach((c,i) => {
+        const b = document.createElement("div");
+        b.className = "char";
+        if (i === ptr) b.classList.add("now");
+        if (hitSet.has(i)) b.classList.add("hit");
+        b.textContent = c;
+        row.appendChild(b);
+    });
+}
+
+// ------------------------------
+// 6. 单步匹配
+// ------------------------------
+function step() {
+    if (ptr >= arr.length) return false;
+    const i = ptr;
+    const c = arr[i];
+    addLog(`[${i}] 字符：${c}`);
+
+    // 跳转失败指针
+    while (cur && !cur.ch[c]) {
+        addLog("  ← 跳失败指针");
+        cur = cur.fail;
+    }
+    if (!cur) cur = root;
+    if (cur.ch[c]) {
+        cur = cur.ch[c];
+        addLog("  → 移动子节点");
+    }
+
+    // 匹配
+    if (cur.pats.length) {
+        const uniq = [...new Set(cur.pats)];
+        addLog(`  匹配：${uniq.join(" ")}`);
+        uniq.forEach(p => {
+            const L = p.length;
+            const s = i - L + 1;
+            for (let j=s; j<=i; j++) hitSet.add(j);
+        });
+    }
+
+    ptr++;
+    refresh();
+    return true;
+}
+
+// ------------------------------
+// 工具
+// ------------------------------
+function addLog(m) {
+    const l = document.getElementById("log");
+    l.textContent += m + "\n";
+    l.scrollTop = l.scrollHeight;
+}
+function refresh() {
+    renderTree();
+    renderText();
+    document.getElementById("info").textContent = `进度：${ptr}/${arr.length}`;
+}
+function resetAll() {
+    clearInterval(timer);
+    s = document.getElementById("text").value.trim();
+    arr = [...s];
+    ptr = 0;
+    cur = root;
+    hitSet = new Set();
+    document.getElementById("log").textContent = "";
+    addLog("已重置");
+    refresh();
+}
+function autoPlay() {
+    clearInterval(timer);
+    timer = setInterval(() => !step() && clearInterval(timer), 500);
+}
+function skipAll() {
+    clearInterval(timer);
+    while (step());
+}
+
+// 绑定
+document.getElementById("reset").onclick = resetAll;
+document.getElementById("step").onclick = () => step();
+document.getElementById("auto").onclick = autoPlay;
+document.getElementById("skip").onclick = skipAll;
+
+resetAll();
+</script>
+</body>
+</html>
