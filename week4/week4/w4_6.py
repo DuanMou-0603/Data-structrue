@@ -7,7 +7,7 @@ def factorial(n):
         return n * factorial(n - 1)
 
 if __name__ == "__main__":
-    print(factorial(5))
+    print(factorial(10))
     #print(factorial(1000)) # RecursionError: maximum recursion depth exceeded
 
 
